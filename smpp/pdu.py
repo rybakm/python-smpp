@@ -1042,46 +1042,46 @@ def encode_optional_parameter(tag, value):
     return b''.join(optional_hex_array)
 
 
-def encode_param_type(param, _type, min=0, max=None, map=None):
+def encode_param_type(param, _type, min_size=0, max=None, map=None):
     if param == None:
-        hex = None
+        hex_param = None
     elif map != None:
         if _type == 'integer' and isinstance(param, int):
-            hex = bytes(('%0'+str(min*2)+'x') % param, encoding='utf-8')
+            hex_param = bytes(('%0'+str(min_size * 2)+'x') % param, encoding='utf-8')
         else:
             try:
-                hex = bytes(map.get(param, ('%0'+str(min*2)+'x') % 0), encoding='utf-8')
+                hex_param = bytes(map.get(param, ('%0'+str(min_size * 2)+'x') % 0), encoding='utf-8')
             except TypeError:
-                hex = map.get(param, ('%0' + str(min * 2) + 'x') % 0)
+                hex_param = map.get(param, ('%0' + str(min_size * 2) + 'x') % 0)
     elif _type == 'integer':
-        hex = bytes(('%0'+str(min*2)+'x') % int(param), encoding='utf-8')
+        hex_param = bytes(('%0'+str(min_size * 2)+'x') % int(param), encoding='utf-8')
     elif _type == 'string':
         if not type(param) == bytes:
-            hex = encode(bytes(param, encoding='utf-8'), 'hex') + b'00'
+            hex_param = encode(bytes(param, encoding='utf-8'), 'hex') + b'00'
         else:
-            hex = encode(param, 'hex') + b'00'
+            hex_param = encode(param, 'hex') + b'00'
     elif _type == 'xstring':
         if not type(param) == bytes:
-            hex = encode(bytes(param, encoding='utf-8'), 'hex')
+            hex_param = encode(bytes(param, encoding='utf-8'), 'hex')
         else:
-            hex = encode(param, 'hex')
+            hex_param = encode(param, 'hex')
     elif _type == 'bitmask':
         try:
-            hex = bytes(param, encoding='utf-8')
+            hex_param = bytes(param, encoding='utf-8')
         except TypeError:
-            hex = param
+            hex_param = param
     elif _type == 'hex':
         try:
-            hex = bytes(param, encoding='utf-8')
+            hex_param = bytes(param, encoding='utf-8')
         except TypeError:
-            hex = param
+            hex_param = param
     else:
-        hex = None
+        hex_param = None
     if hex:
-        if len(hex) % 2:
+        if len( hex_param) % 2:
             # pad odd length hex strings
-            hex = b'0' + hex
+            hex_param = b'0' +  hex_param
     #print type, min, max, repr(param), hex, map
-    return hex
+    return hex_param
 
 
