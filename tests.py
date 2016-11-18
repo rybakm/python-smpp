@@ -1,4 +1,5 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
+
 import unittest, collections
 from datetime import datetime, timedelta
 
@@ -23,8 +24,22 @@ def hexclean(dirtyhex):
     """Remove whitespace, comments & newlines from hex string"""
     return re.sub(r'\s','',re.sub(r'#.*\n','\n',dirtyhex))
 
+def dictionary_bytes_to_str(dictionary):
+    for key, value in dictionary.items():
+        if isinstance(value, dict):
+            dictionary[key] = dictionary_bytes_to_str(value)
+        elif type(value) == bytes:
+            dictionary[key] = str(value, 'utf-8')
+        elif isinstance(value, list):
+            new_list = []
+            for l in value:
+                new_list.append(dictionary_bytes_to_str(l))
+            dictionary[key] = new_list
+    return dictionary
+
 def prettydump(pdu_obj):
     """Unpack PDU dictionary and dump it as a JSON formatted string"""
+    pdu_obj = dictionary_bytes_to_str(pdu_obj)
     return json.dumps(pdu_obj, indent=4, sort_keys=True)
 
 def hex_to_named(dictionary):
@@ -54,20 +69,20 @@ def create_pdu_asserts():
         pstr += " = '''"
         pstr += prettydump(unpack_pdu(pack_pdu(pdu)))
         pstr += "'''"
-        print pstr
+        print (pstr)
 
 
 def create_pdu_hex_asserts():
     pdu_index = 0
     for pdu_hex in pdu_hex_strings:
         pdu_index += 1
-        pstr  = "\n########################################\n"
+        pstr = "\n########################################\n"
         pstr += "pdu_json_"
         pstr += ('%010d' % pdu_index)
         pstr += " = '''"
         pstr += prettydump(unpack_hex(pdu_hex))
         pstr += "'''"
-        print pstr
+        print (pstr)
 
 
 ## :w|!python % > test/pdu_asserts.py
@@ -82,6 +97,7 @@ def create_pdu_hex_asserts():
 class PduTestCase(unittest.TestCase):
 
     def setUp(self):
+        self.maxDiff = None
         pass
 
     def tearDown(self):
@@ -90,16 +106,16 @@ class PduTestCase(unittest.TestCase):
     def assertDictEquals(self, dictionary1, dictionary2, depth=[]):
         """
         Recursive dictionary comparison, will fail if any keys and values
-        in the two dictionaries don't match. Displays the key chain / depth 
+        in the two dictionaries don't match. Displays the key chain / depth
         and which parts of the two dictionaries didn't match.
         """
-        d1_keys = dictionary1.keys()
+        d1_keys = list(dictionary1.keys())
         d1_keys.sort()
-        
-        d2_keys = dictionary2.keys()
+
+        d2_keys = list(dictionary2.keys())
         d2_keys.sort()
-        
-        self.failUnlessEqual(d1_keys, d2_keys, 
+
+        self.failUnlessEqual(d1_keys, d2_keys,
             "Dictionary keys do not match, %s vs %s" % (
                 d1_keys, d2_keys))
         for key, value in dictionary1.items():
@@ -108,15 +124,15 @@ class PduTestCase(unittest.TestCase):
                 depth.append(key)
                 self.assertDictEquals(value, dictionary2[key], depth)
             else:
-                self.failUnlessEqual(value, dictionary2[key], 
+                self.failUnlessEqual(value, dictionary2[key],
                     "Dictionary values do not match for key '%s' " \
                     "(%s vs %s) at depth: %s.\nDictionary 1: %s\n" \
                     "Dictionary 2: %s\n" % (
                         key, value, dictionary2[key], ".".join(depth),
                         prettydump(dictionary1), prettydump(dictionary2)))
-    
+
     def test_pack_unpack_pdu_objects(self):
-        print ''
+        print ('')
         """
         Take a dictionary, pack and unpack it and dump it as JSON correctly
         """
@@ -124,7 +140,11 @@ class PduTestCase(unittest.TestCase):
         for pdu in pdu_objects:
             pdu_index += 1
             padded_index = '%010d' % pdu_index
-            print '...', padded_index
+            print ('...', padded_index)
+            kek1 = pdu
+            kek2 = pack_pdu(pdu)
+            kek3 = unpack_pdu(pack_pdu(pdu))
+
             self.assertEquals(
                     re.sub('\n *','',
                         prettydump(unpack_pdu(pack_pdu(pdu)))),
@@ -133,7 +153,7 @@ class PduTestCase(unittest.TestCase):
 
 
     def test_pack_unpack_pdu_hex_strings(self):
-        print ''
+        print ('')
         """
         Read the hex data, clean it, and unpack it to JSON correctly
         """
@@ -141,7 +161,13 @@ class PduTestCase(unittest.TestCase):
         for pdu_hex in pdu_hex_strings:
             pdu_index += 1
             padded_index = '%010d' % pdu_index
-            print '...', padded_index
+            print ('...', padded_index)
+            kek = unpack_hex(pdu_hex)
+            topkek = prettydump(unpack_hex(pdu_hex))
+            equal1 = re.sub('\n *','',
+                        prettydump(unpack_hex(pdu_hex)))
+            equal2 = re.sub('\n *','',
+                        eval('pdu_hex_asserts.pdu_json_'+padded_index))
             self.assertEquals(
                     re.sub('\n *','',
                         prettydump(unpack_hex(pdu_hex))),
@@ -150,7 +176,7 @@ class PduTestCase(unittest.TestCase):
 
 
     def test_pack_unpack_performance(self):
-        print ''
+        print ('')
         """
         Pack & unpack 500 submit_sm PDUs in under 1 second
         """
@@ -192,7 +218,7 @@ class PduTestCase(unittest.TestCase):
             submit_sm['body']['mandatory_parameters']['short_message'] = sm
             u = unpack_pdu(pack_pdu(submit_sm))
         delta = datetime.now() - start
-        print '... 500 pack & unpacks in:', delta
+        print ('... 500 pack & unpacks in:', delta)
         self.assertTrue(delta < timedelta(seconds=1))
 
     def test_pack_unpack_of_unicode(self):
@@ -278,13 +304,13 @@ class PduTestCase(unittest.TestCase):
 class PduBuilderTestCase(unittest.TestCase):
 
     def test_true(self):
-        print ''
+        print ('')
         self.assertTrue(True)
 
 
 
 if __name__ == '__main__':
-    print '\n##########################################################\n'
+    print ('\n##########################################################\n')
     #deliv_sm_resp = DeliverSMResp(23)
     #print deliv_sm_resp.get_obj()
     #print deliv_sm_resp.get_hex()
@@ -298,27 +324,27 @@ if __name__ == '__main__':
     #print sub_sm.get_obj()
     #print sub_sm.get_hex()
     #print unpack_pdu(sub_sm.get_bin())
-    print '\n##########################################################\n'
+    print ('\n##########################################################\n')
 
     esme = ESME()
     esme.loadDefaults(clickatell_defaults)
     esme.loadDefaults(credentials_test.logica)
-    print esme.defaults
+    print (esme.defaults)
     esme.bind_transmitter()
-    print esme.state
+    print (esme.state)
     start = datetime.now()
     for x in range(1):
         esme.submit_sm(
                 short_message = 'gobbledygook',
                 destination_addr = '555',
                 )
-        print esme.state
+        print (esme.state)
     for x in range(1):
         esme.submit_multi(
                 short_message = 'gobbledygook',
                 dest_address = ['444','333'],
                 )
-        print esme.state
+        print (esme.state)
     for x in range(1):
         esme.submit_multi(
                 short_message = 'gobbledygook',
@@ -327,13 +353,13 @@ if __name__ == '__main__':
                     {'dest_flag':2, 'dl_name':'list22222'},
                     ],
                 )
-        print esme.state
+        print (esme.state)
     delta = datetime.now() - start
     esme.disconnect()
-    print esme.state
-    print 'excluding binding ... time to send messages =', delta
+    print (esme.state)
+    print ('excluding binding ... time to send messages =', delta)
 
 
-#if __name__ == '__main__':
-    #unittest.main()
+if __name__ == '__main__':
+    unittest.main()
 

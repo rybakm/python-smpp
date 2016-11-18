@@ -1,11 +1,12 @@
+﻿# -*- coding: utf-8 -*-
 
-from pdu import *
+from .pdu import *
 
 
 def detect_multipart(pdu):
     to_msisdn = pdu['body']['mandatory_parameters']['destination_addr']
     from_msisdn = pdu['body']['mandatory_parameters']['source_addr']
-    short_message = pdu['body']['mandatory_parameters']['short_message']
+    short_message = pdu['body']['mandatory_parameters']['short_message']  # this parameter should be binary string
     optional_parameters = {}
     for d in pdu['body'].get('optional_parameters',[]):
         optional_parameters[d['tag']] = d['value']
@@ -22,14 +23,14 @@ def detect_multipart(pdu):
         mdict['part_message'] = short_message
         return mdict
     except:
-        pass
+        print(pdu['body'])
 
     # all other multipart types will fail on short_message == None
     if short_message == None:
         return None
 
-    if (short_message[0:1] == '\x00'
-    and short_message[1:2] == '\x03'
+    if (short_message[0:1] == b'\x00'
+    and short_message[1:2] == b'\x03'
     and len(short_message) >= 5):
         mdict = {'multipart_type':'SAR'}
         mdict['to_msisdn'] = to_msisdn
@@ -40,9 +41,9 @@ def detect_multipart(pdu):
         mdict['part_message'] = short_message[5:]
         return mdict
 
-    if (short_message[0:1] == '\x05'
-    and short_message[1:2] == '\x00'
-    and short_message[2:3] == '\x03'
+    if (short_message[0:1] == b'\x05'
+    and short_message[1:2] == b'\x00'
+    and short_message[2:3] == b'\x03'
     and len(short_message) >= 6):
         mdict = {'multipart_type':'CSM'}
         mdict['to_msisdn'] = to_msisdn
@@ -53,9 +54,9 @@ def detect_multipart(pdu):
         mdict['part_message'] = short_message[6:]
         return mdict
 
-    if (short_message[0:1] == '\x06'
-    and short_message[1:2] == '\x00'
-    and short_message[2:3] == '\x04'
+    if (short_message[0:1] == b'\x06'
+    and short_message[1:2] == b'\x00'
+    and short_message[2:3] == b'\x04'
     and len(short_message) >= 7):
         mdict = {'multipart_type':'CSM16'}
         mdict['to_msisdn'] = to_msisdn
@@ -94,8 +95,8 @@ class MultipartMessage:
             return False
 
     def get_partial(self):
-        items = self.array.items()
-        message = ''.join([i[1]['part_message'] for i in items])
+        items = list(self.array.items())
+        message = b''.join([i[1]['part_message'] for i in items])
         to_msisdn = from_msisdn = ''
         if len(items):
             to_msisdn = items[0][1].get('to_msisdn')
@@ -105,13 +106,13 @@ class MultipartMessage:
                 'message':message}
 
     def get_completed(self):
-        items = self.array.items()
+        items = list(self.array.items())
         if len(items) and len(items) == items[0][1].get('total_number'):
             return self.get_partial()
         return None
 
     def get_key(self, delimiter = '_'):
-        items = self.array.items()
+        items = list(self.array.items())
         if len(items):
             return multipart_key(items[0][1], delimiter)
         return None

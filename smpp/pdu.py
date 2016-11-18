@@ -1,4 +1,7 @@
+﻿# -*- coding: utf-8 -*-
+
 import binascii
+from codecs import encode, decode
 import re
 try:
     import json
@@ -277,6 +280,7 @@ command_id_by_hex = {
     '0001000b':{'hex':'0001000b', 'name':'outbind_v4'},
 }
 def command_id_name_by_hex(x):
+    # return command_id_by_hex.get(x,{}).get('name')
     return command_id_by_hex.get(x,{}).get('name')
 
 
@@ -824,8 +828,8 @@ def decode_header(hex_ref):
     (command_length, command_id,    command_status,  sequence_number, hex_ref[0]) = \
     (pdu_hex[0:8],   pdu_hex[8:16], pdu_hex[16:24],  pdu_hex[24:32],  pdu_hex[32: ])
     length = int(command_length, 16)
-    command = command_id_name_by_hex(command_id)
-    status = command_status_name_by_hex(command_status)
+    command = command_id_name_by_hex(str(command_id, 'utf-8'))
+    status = command_status_name_by_hex(str(command_status, 'utf-8'))
     sequence = int(sequence_number, 16)
     header = {}
     header['command_length'] = length
@@ -836,6 +840,9 @@ def decode_header(hex_ref):
 
 
 def decode_body(command, hex_ref):
+    # encode binary strings to utf-8 python3 standard string
+    # for x in range(0, len(hex_ref)):
+    #     hex_ref[x] = str(hex_ref[x], 'utf-8')
     body = {}
     if command != None:
         fields = mandatory_parameter_list_by_command_name(command)
@@ -853,15 +860,15 @@ def decode_mandatory_parameters(fields, hex_ref):
     if len(hex_ref[0]) > 1:
         for field in fields:
             #old = len(hex_ref[0])
-            data = ''
-            octet = ''
+            data = b''
+            octet = b''
             count = 0
-            if field['var'] == True or field['var'] == False:
+            if field['var'] is True or field['var'] is False:
                 while (len(hex_ref[0]) > 1
                         and (count < field['min']
-                            or (field['var'] == True
+                            or (field['var'] is True
                                 and count < field['max']+1
-                                and octet != '00'))):
+                                and octet != b'00'))):
                     octet = octpop(hex_ref)
                     data += octet
                     count += 1
@@ -876,6 +883,10 @@ def decode_mandatory_parameters(fields, hex_ref):
             else:
                 count = mandatory_parameters[field['var']]
             if field['map'] != None:
+                try:
+                    data = str(data, 'utf-8')
+                except ValueError:
+                    pass
                 mandatory_parameters[field['name']] = maps[field['map']+'_by_hex'].get(data, None)
             if field['map'] == None or mandatory_parameters[field['name']] == None:
                 mandatory_parameters[field['name']] = decode_hex_type(data, field['type'], count, hex_ref)
@@ -885,36 +896,46 @@ def decode_mandatory_parameters(fields, hex_ref):
 
 def decode_optional_parameters(hex_ref):
     optional_parameters = []
-    hex = hex_ref[0]
-    while len(hex) > 0:
-        (tag_hex, length_hex, rest) = (hex[0:4], hex[4:8], hex[8: ])
+    hex_tab = hex_ref[0]
+    while len(hex_tab) > 0:
+        (tag_hex, length_hex, rest) = (hex_tab[0:4], hex_tab[4:8], hex_tab[8: ])
+        tag_hex = str(tag_hex, 'utf-8')
         tag = optional_parameter_tag_name_by_hex(tag_hex)
         if tag == None:
-            tag = tag_hex
-        length = int(length_hex, 16)
+            tag = str(tag_hex)
+        length = int('0'+str(length_hex, 'utf-8'), 16)
         (value_hex, tail) = (rest[0:length*2], rest[length*2: ])
         if len(value_hex) == 0:
             value = None
         else:
             value = decode_hex_type(value_hex, optional_parameter_tag_type_by_hex(tag_hex))
-        hex = tail
+        hex_tab = tail
         optional_parameters.append({'tag':tag, 'length':length, 'value':value})
     return optional_parameters
 
 
-def decode_hex_type(hex, type, count=0, hex_ref=['']):
+def decode_hex_type(hex, hex_type, count=0, hex_ref=['']):
     if hex == None:
         return hex
-    elif type == 'integer':
-        return int(hex, 16)
-    elif type == 'string':
-        return re.sub('00','',hex).decode('hex')
-    elif type == 'xstring':
-        return hex.decode('hex')
-    elif (type == 'dest_address'
-            or type == 'unsuccess_sme'):
+    elif hex_type == 'integer':
+        try:
+            return int(str(hex, 'utf-8'), 16)
+        except (UnicodeDecodeError, TypeError):
+            return int(hex, 16)
+    elif hex_type == 'string':
+        try:
+            return str(decode(re.sub(b'00', b'', hex), 'hex'), 'utf-8')
+        except UnicodeDecodeError:
+            return decode(re.sub(b'00', b'', hex), 'hex')
+    elif hex_type == 'xstring':
+        try:
+            return str(decode(hex, 'hex'), 'utf-8')
+        except UnicodeDecodeError:
+            return decode(hex, 'hex')
+    elif (hex_type == 'dest_address'
+            or hex_type == 'unsuccess_sme'):
         list = []
-        fields = mandatory_parameter_list_by_command_name(type)
+        fields = mandatory_parameter_list_by_command_name(hex_type)
         for i in range(count):
             item = decode_mandatory_parameters(fields, hex_ref)
             if item.get('dest_flag', None) == 1: # 'dest_address' only
@@ -941,7 +962,11 @@ def octpop(hex_ref):
 #### Encoding functions #######################################################
 
 def pack_pdu(pdu_obj):
-    return binascii.a2b_hex(encode_pdu(pdu_obj))
+    try:
+        return binascii.a2b_hex(encode_pdu(pdu_obj))
+    except ValueError as e:
+        print(e)
+        print(encode_pdu(pdu_obj))
 
 
 def encode_pdu(pdu_obj):
@@ -949,16 +974,16 @@ def encode_pdu(pdu_obj):
     body = pdu_obj.get('body', {})
     mandatory = body.get('mandatory_parameters', {})
     optional = body.get('optional_parameters', [])
-    body_hex = ''
+    body_hex = b''
     fields = mandatory_parameter_list_by_command_name(header['command_id'])
     body_hex += encode_mandatory_parameters(mandatory, fields)
     for opt in optional:
         body_hex += encode_optional_parameter(opt['tag'], opt['value'])
     actual_length = 16 + len(body_hex)/2
-    command_length = '%08x' % actual_length
-    command_id = command_id_hex_by_name(header['command_id'])
-    command_status = command_status_hex_by_name(header['command_status'])
-    sequence_number = '%08x' % header['sequence_number']
+    command_length = bytes('%08x' % int(actual_length), encoding="UTF-8")
+    command_id =  bytes(command_id_hex_by_name(header['command_id']), encoding="UTF-8")
+    command_status = bytes(command_status_hex_by_name(header['command_status']), encoding="UTF-8")
+    sequence_number = bytes('%08x' % header['sequence_number'], encoding="UTF-8")
     pdu_hex = command_length + command_id + command_status + sequence_number + body_hex
     return pdu_hex
 
@@ -984,10 +1009,10 @@ def encode_mandatory_parameters(mandatory_obj, fields):
                     elif item.get('dest_flag', None) == 2:
                         plusfields = mandatory_parameter_list_by_command_name('distribution_list')
                     hex_item = encode_mandatory_parameters(item, flagfields + plusfields)
-                    if isinstance(hex_item, str) and len(hex_item) > 0:
+                    if isinstance(hex_item, bytes) and len(hex_item) > 0:
                         hex_list.append(hex_item)
                 param_length = len(hex_list)
-                mandatory_hex_array.append(''.join(hex_list))
+                mandatory_hex_array.append(b''.join(hex_list))
             else:
                 hex_param = encode_param_type(
                         param, field['type'], field['min'], field['max'], map)
@@ -1001,7 +1026,7 @@ def encode_mandatory_parameters(mandatory_obj, fields):
                         'integer',
                         len(mandatory_hex_array[length_index])/2)
             index += 1
-    return ''.join(mandatory_hex_array)
+    return b''.join(mandatory_hex_array)
 
 
 def encode_optional_parameter(tag, value):
@@ -1011,35 +1036,51 @@ def encode_optional_parameter(tag, value):
         value_hex = encode_param_type(
                 value,
                 optional_parameter_tag_type_by_hex(tag_hex))
-        length_hex = '%04x' % (len(value_hex)/2)
+        length_hex = bytes('%04x' % int(len(value_hex)/2), encoding="utf-8")
+        tag_hex = bytes(tag_hex, encoding="utf-8")
         optional_hex_array.append(tag_hex + length_hex + value_hex)
-    return ''.join(optional_hex_array)
+    return b''.join(optional_hex_array)
 
 
-def encode_param_type(param, type, min=0, max=None, map=None):
+def encode_param_type(param, _type, min=0, max=None, map=None):
     if param == None:
         hex = None
     elif map != None:
-        if type == 'integer' and isinstance(param, int):
-            hex = ('%0'+str(min*2)+'x') % param
+        if _type == 'integer' and isinstance(param, int):
+            hex = bytes(('%0'+str(min*2)+'x') % param, encoding='utf-8')
         else:
-            hex = map.get(param, ('%0'+str(min*2)+'x') % 0)
-    elif type == 'integer':
-        hex = ('%0'+str(min*2)+'x') % int(param)
-    elif type == 'string':
-        hex = param.encode('hex') + '00'
-    elif type == 'xstring':
-        hex = param.encode('hex')
-    elif type == 'bitmask':
-        hex = param
-    elif type == 'hex':
-        hex = param
+            try:
+                hex = bytes(map.get(param, ('%0'+str(min*2)+'x') % 0), encoding='utf-8')
+            except TypeError:
+                hex = map.get(param, ('%0' + str(min * 2) + 'x') % 0)
+    elif _type == 'integer':
+        hex = bytes(('%0'+str(min*2)+'x') % int(param), encoding='utf-8')
+    elif _type == 'string':
+        if not type(param) == bytes:
+            hex = encode(bytes(param, encoding='utf-8'), 'hex') + b'00'
+        else:
+            hex = encode(param, 'hex') + b'00'
+    elif _type == 'xstring':
+        if not type(param) == bytes:
+            hex = encode(bytes(param, encoding='utf-8'), 'hex')
+        else:
+            hex = encode(param, 'hex')
+    elif _type == 'bitmask':
+        try:
+            hex = bytes(param, encoding='utf-8')
+        except TypeError:
+            hex = param
+    elif _type == 'hex':
+        try:
+            hex = bytes(param, encoding='utf-8')
+        except TypeError:
+            hex = param
     else:
         hex = None
     if hex:
         if len(hex) % 2:
             # pad odd length hex strings
-            hex = '0' + hex
+            hex = b'0' + hex
     #print type, min, max, repr(param), hex, map
     return hex
 

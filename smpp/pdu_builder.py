@@ -1,5 +1,6 @@
+﻿# -*- coding: utf-8 -*-
 
-from pdu import *
+from .pdu import *
 
 class PDU(object):
     def __init__(self,

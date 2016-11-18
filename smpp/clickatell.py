@@ -1,3 +1,4 @@
+﻿# -*- coding: utf-8 -*-
 
 clickatell_defaults = {
         'interface_version':'34',

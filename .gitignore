@@ -5,3 +5,8 @@ ve/
 *_priv.py
 .coverage
 coverage-html/
+.idea/
+.vagrant/
+Vagrantfile
+pep8.txt
+python-smpp/
